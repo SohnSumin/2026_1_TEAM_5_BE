@@ -138,7 +138,7 @@ void main() async {
 
   try {
     while (true) {
-      print("\n[1] 로그인/OTP요청  [2] 회원가입  [q] 종료");
+      print("\n[1] 로그인/OTP요청  [2] 회원가입   [3] 탈퇴   [q] 종료");
       final choice = getInput("선택");
 
       if (choice == 'q') break;
@@ -190,6 +190,10 @@ void main() async {
           );
           print("요청자 가입 성공! (ID: ${res['user_id']})");
         }
+      } else if (choice == '3') {
+        print("탈퇴 기능은 아직 구현되지 않았습니다.");
+      } else {
+        print("잘못된 선택입니다.");
       }
     }
   } catch (e) {
