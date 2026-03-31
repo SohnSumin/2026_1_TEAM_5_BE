@@ -2,7 +2,7 @@ import uuid
 from sqlalchemy import Column, String, Integer, Boolean, Text, ForeignKey, DateTime, Date, Time, func, Enum, Float
 from sqlalchemy.dialects.postgresql import UUID, ARRAY
 from sqlalchemy.orm import relationship
-from geoalchemy2 import Geography
+from geoalchemy2 import Geography, WKTElement
 from app.core.database import Base
 
 # --- 1. Users & Profiles ---
@@ -15,8 +15,8 @@ class User(Base):
     created_at = Column(DateTime, server_default=func.now())
 
     # 관계 설정
-    senior_profile = relationship("SeniorProfile", back_populates="user", uselist=False)
-    requester_profile = relationship("RequesterProfile", back_populates="user", uselist=False)
+    senior_profile = relationship("SeniorProfile", back_populates="user", uselist=False, cascade="all, delete-orphan")
+    requester_profile = relationship("RequesterProfile", back_populates="user", uselist=False, cascade="all, delete-orphan")
     locations = relationship("SeniorLocation", back_populates="user", cascade="all, delete-orphan")
 
 class SeniorProfile(Base):
@@ -31,7 +31,7 @@ class SeniorProfile(Base):
     bio_summary = Column(Text)
     tags = Column(ARRAY(Text))
     auth_code = Column(String(20))
-    updated_at = Column(DateTime, onupdate=func.now())
+    updated_at = Column(DateTime, server_default=func.now(), onupdate=func.now())
 
     user = relationship("User", back_populates="senior_profile")
 
@@ -58,15 +58,23 @@ class SeniorLocation(Base):
 
     user = relationship("User", back_populates="locations")
 
+   # SeniorLocation 내부
     def __init__(self, **kwargs):
-        # 위경도 값이 들어오면 공간 데이터를 자동으로 생성합니다.
         lat = kwargs.get('latitude')
         lon = kwargs.get('longitude')
         if lat is not None and lon is not None:
-            kwargs['coords'] = f"POINT({lon} {lat})"
+            # 문자열이 아니라 WKTElement 객체로 감싸서 전달
+            kwargs['coords'] = WKTElement(f"POINT({lon} {lat})", srid=4326)
         super().__init__(**kwargs)
 
 # --- 2. Jobs & Matchings ---
+
+class JobCategory(Base):
+    __tablename__ = "job_categories"
+    id = Column(Integer, primary_key=True)
+    main_category = Column(String(50), nullable=False) # 가사 및 환경 관리
+    sub_category = Column(String(50), nullable=False)  # 반찬/요리
+    tags = Column(ARRAY(String), nullable=False)       # [#집밥제조, #밑반찬...]
 
 class JobPost(Base):
     __tablename__ = "job_posts"
@@ -74,9 +82,11 @@ class JobPost(Base):
     requester_id = Column(UUID(as_uuid=True), ForeignKey("users.user_id"))
     title = Column(String(200), nullable=False)
     content = Column(Text)
-    location_coords = Column(Geography(geometry_type='POINT', srid=4326), nullable=False)
+    latitude = Column(Float, nullable=False)
+    longitude = Column(Float, nullable=False)
+    location_coord = Column(Geography(geometry_type='POINT', srid=4326), nullable=False)
     location_name = Column(Text, nullable=False)
-    category_tag = Column(String(50), nullable=False)
+    category_tag = Column(String(50)) # 실제 선택된 하나의 태그 (예: #밑반찬)
     thumbnail_url = Column(Text)
     job_date = Column(Date, nullable=False)
     start_time = Column(Time)
@@ -85,6 +95,15 @@ class JobPost(Base):
     created_at = Column(DateTime, server_default=func.now())
 
     images = relationship("JobImage", back_populates="post", cascade="all, delete-orphan")
+
+    # SeniorLocation 내부
+    def __init__(self, **kwargs):
+        lat = kwargs.get('latitude')
+        lon = kwargs.get('longitude')
+        if lat is not None and lon is not None:
+            # 문자열이 아니라 WKTElement 객체로 감싸서 전달
+            kwargs['location_coord'] = WKTElement(f"POINT({lon} {lat})", srid=4326)
+        super().__init__(**kwargs)
 
 class JobImage(Base):
     __tablename__ = "job_images"

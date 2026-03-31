@@ -20,6 +20,13 @@ class JobStatus(str, Enum):
     DONE = "DONE"
     EXPIRED = "EXPIRED"
 
+class NotificationType(str, Enum):
+    PROPOSAL = "PROPOSAL"
+    ACCEPT = "ACCEPT"
+    REJECT = "REJECT"
+    JOB = "JOB"
+
+
 # --- 1. Auth & Profiles ---
 
 class Token(BaseModel):
@@ -64,6 +71,12 @@ class LocationResponse(LocationBase):
     class Config:
         from_attributes = True
 
+class LocationListResponse(BaseModel):
+    locations: List[LocationResponse]
+
+class LocationUpdateList(BaseModel):
+    locations: List[LocationBase]
+
 # 시니어 가입/수정
 class SeniorCreate(BaseModel):
     phone_number: str
@@ -72,10 +85,14 @@ class SeniorCreate(BaseModel):
     birth_year: int
     auth_code: Optional[str] = None
     profile_icon: Optional[str] = "default_icon"
+    bio_summary: Optional[str] = None
+    tags: List[str] = []
     locations: List[LocationCreate] = Field(..., min_items=1, max_items=3)
 
 class SeniorUpdate(BaseModel):
     name: Optional[str] = None
+    gender: Optional[str] = None
+    tags: Optional[List[str]] = None
     profile_image_url: Optional[str] = None
     birth_year: Optional[int] = None
     bio_summary: Optional[str] = None
@@ -91,6 +108,7 @@ class SeniorDetailResponse(BaseModel):
     trust_score: int = 50
     profile_icon: Optional[str] = None 
     bio_summary: Optional[str] = None
+    tags: List[str] = []
     locations: List[LocationResponse] = []
 
     class Config:
@@ -111,6 +129,12 @@ class RequesterResponse(BaseModel):
 
     class Config:
         from_attributes = True
+
+class RequesterUpdate(BaseModel):
+    nickname: Optional[str] = None
+    gender: Optional[str] = None
+    birth_year: Optional[int] = None
+    profile_image_url: Optional[str] = None
 
 # --- 2. Job Posts ---
 
@@ -154,6 +178,16 @@ class JobPostDetailResponse(JobPostResponse):
 
 # --- 3. Matchings & Notifications ---
 
+class MatchResponse(BaseModel):
+    match_id: UUID
+    post_id: UUID
+    senior_id: UUID
+    status: MatchStatus
+    created_at: datetime
+
+    class Config:
+        from_attributes = True
+
 class MatchApplyRequest(BaseModel):
     post_id: UUID
 
@@ -164,9 +198,13 @@ class MatchProposeRequest(BaseModel):
 class MatchStatusUpdate(BaseModel):
     status: MatchStatus
 
+    class Config:
+        from_attributes = True
+
+
 class NotificationResponse(BaseModel):
     noti_id: UUID
-    type: str
+    type: NotificationType
     content: str
     related_id: UUID
     is_read: bool
