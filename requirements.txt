@@ -7,3 +7,7 @@ python-jose[cryptography]
 passlib[bcrypt]
 pydantic
 pydantic-settings
+geoalchemy2
+alembic
+pytest
+httpx
