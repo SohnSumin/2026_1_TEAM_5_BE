@@ -8,11 +8,14 @@ from enum import Enum
 class UserRole(str, Enum):
     SENIOR = "SENIOR"
     REQUESTER = "REQUESTER"
+    ADMIN = "ADMIN"
 
 class MatchStatus(str, Enum):
     WAITING = "WAITING"
     ACCEPTED = "ACCEPTED"
     REJECTED = "REJECTED"
+    CANCLED = "CANCELED"
+    DONE = "DONE"
 
 class JobStatus(str, Enum):
     OPEN = "OPEN"
@@ -25,7 +28,27 @@ class NotificationType(str, Enum):
     ACCEPT = "ACCEPT"
     REJECT = "REJECT"
     JOB = "JOB"
+    DONE = "DONE"
+    CANCELED = "CANCELED"
 
+class SeniorReportReason(str, Enum): # 시니어가 요청자를 신고할 때의 사유
+    RUDENESS = "RUDENESS"
+    UNREASONABLE_REQUESTS = "UNREASON"
+    TARDINESS = "TARDINESS"
+    NO_SHOW = "NO_SHOW"
+    LATE_PAYMENT = "LATE_PAYMENT"
+    NON_PAYMENT = "NON_PAYMENT"
+
+class RequesterReportReason(str, Enum): # 요청자가 시니어를 신고할 때의 사유
+    POOR_QUALITY = "POOR_QUALITY"
+    RUDENESS = "RUDENESS"
+    TARDINESS = "TARDINESS"
+    NO_SHOW = "NO_SHOW"
+
+class ReportStatus(str, Enum):
+    PENDING = "PENDING"
+    RESOLVED = "RESOLVED"
+    REJECTED = "REJECTED"
 
 # --- 1. Auth & Profiles ---
 
@@ -208,6 +231,28 @@ class NotificationResponse(BaseModel):
     content: str
     related_id: UUID
     is_read: bool
+    created_at: datetime
+
+    class Config:
+        from_attributes = True
+
+
+# --- 4. User Report ---
+class UserReportRequest(BaseModel):
+    reported_user_id: UUID
+    reason: list[SeniorReportReason] | list[RequesterReportReason]
+    description: Optional[str] = None
+
+class UserReportCreate(UserReportRequest):
+    pass
+
+class UserReportResponse(BaseModel):
+    report_id: UUID
+    reporter_user_id: UUID
+    reported_user_id: UUID
+    reason: list[SeniorReportReason] | list[RequesterReportReason]
+    description: Optional[str] = None
+    status: ReportStatus
     created_at: datetime
 
     class Config:

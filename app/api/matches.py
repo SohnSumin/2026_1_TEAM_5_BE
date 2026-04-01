@@ -80,18 +80,20 @@ def get_recommended_jobs_for_senior(
         # 태그가 없으면 필터링이 불가능하므로 빈 리스트 반환 혹은 전체 거리 검색 (여기선 빈 리스트)
         return []
 
-    # 2) [태그 필터링] 공고의 태그가 시니어의 관심 태그 목록에 포함된 것만 먼저 필터링
-    # DB 수준에서 .in_()을 사용하여 성능 최적화
-    tagged_jobs = db.query(models.JobPost).filter(
-        models.JobPost.tag.in_(senior.tags),
-        models.JobPost.status == "RECRUITING"
-    ).all()
+    # # 2) [태그 필터링] 공고의 태그가 시니어의 관심 태그 목록에 포함된 것만 먼저 필터링
+    # # DB 수준에서 .in_()을 사용하여 성능 최적화
+    # tagged_jobs = db.query(models.JobPost).filter(
+    #     models.JobPost.tag.in_(senior.tags),
+    #     models.JobPost.status == "RECRUITING"
+    # ).all()
 
     # 3) [거리 필터링] 시니어의 3거점 중 하나라도 가까운지 확인
     locations = db.query(models.SeniorLocation).filter(models.SeniorLocation.user_id == current_user.user_id).all()
     recommended = []
 
-    for job in tagged_jobs:
+    jobs = db.query(models.JobPost).filter(models.JobPost.status == "OPEN").all()
+
+    for job in jobs:
         is_nearby = False
         for loc in locations:
             if get_distance(job.latitude, job.longitude, loc.latitude, loc.longitude) <= range_m:
@@ -153,6 +155,9 @@ def update_match_status(
 
     job = db.query(models.JobPost).filter(models.JobPost.post_id == match.post_id).first()
 
+    if match.status == "DONE":
+        raise HTTPException(status_code=400, detail="완료된 매칭은 상태를 변경할 수 없습니다.")
+    
     if payload.status == "ACCEPTED":
         match.status = "ACCEPTED"
         job.status = "MATCHED" # 공고 상태 변경
@@ -214,7 +219,17 @@ def complete_job(
     # 종료 권한 체크 (보통 요청자가 종료를 누르거나, 둘 다 가능하게 설정)
     match.status = "DONE"
     job.status = "DONE"
-    
+
+    # 시니어 & 요청자 각각의 trust_score 업데이트 로직 (예시: 시니어는 +3, 요청자는 +3)
+    senior = db.query(models.SeniorProfile).filter(models.SeniorProfile.user_id == match.senior_id).first()
+    requester = db.query(models.RequesterProfile).filter(models.RequesterProfile.user_id == job.requester_id).first()
+
+    # 프로필이 존재할 때만 점수 부여 (안전장치)
+    if senior:
+        senior.trust_score += 3
+    if requester:
+        requester.trust_score += 3
+
     # 종료 알림 생성 (시니어에게 수고했다는 알림)
     db.add(models.Notification(
         user_id=match.senior_id,
@@ -247,13 +262,13 @@ def get_recommended_seniors(
     # senior.tags는 List[str] 형태라고 가정합니다.
     all_seniors = db.query(models.SeniorProfile).all()
     
-    # 1차 필터링: 태그가 일치하는 시니어만 후보군으로 선정
-    tagged_seniors = [s for s in all_seniors if s.tags and (job.category_tag in s.tags)]
+    # # 1차 필터링: 태그가 일치하는 시니어만 후보군으로 선정
+    # tagged_seniors = [s for s in all_seniors if s.tags and (job.category_tag in s.tags)]
     
     recommended = []
 
     # 3) [거리 필터링] 후보 시니어들의 거점 확인
-    for senior in tagged_seniors:
+    for senior in all_seniors:
         is_nearby = False
         locations = db.query(models.SeniorLocation).filter(models.SeniorLocation.user_id == senior.user_id).all()
         for loc in locations:
@@ -277,3 +292,66 @@ def get_notifications(
     return db.query(models.Notification).filter(
         models.Notification.user_id == current_user.user_id
     ).order_by(models.Notification.created_at.desc()).all()
+
+# [DELETE] 특정 알림 삭제 (예: 사용자가 알림을 읽고 삭제하는 경우)
+@router.delete("/notifications/{noti_id}")
+def delete_notification(
+    noti_id: UUID,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user)
+):
+    noti = db.query(models.Notification).filter(
+        models.Notification.noti_id == noti_id,
+        models.Notification.user_id == current_user.user_id
+    ).first()
+    
+    if not noti:
+        raise HTTPException(status_code=404, detail="알림을 찾을 수 없습니다.")
+    
+    db.delete(noti)
+    db.commit()
+    return {"message": "알림이 삭제되었습니다."}   
+
+
+# [DELETE] 잡힌 매칭을 취소 (시니어 또는 요청자가 매칭을 취소하는 경우)
+@router.delete("/{match_id}/cancel")
+def cancel_match(
+    match_id: UUID,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user)
+):
+    match = db.query(models.Matching).filter(models.Matching.match_id == match_id).first()
+    if not match or match.status != "ACCEPTED":
+        raise HTTPException(status_code=400, detail="취소할 수 있는 활성화된 매칭이 아닙니다.")
+
+    job = db.query(models.JobPost).filter(models.JobPost.post_id == match.post_id).first()
+    
+    # 취소 권한 체크 (시니어 또는 요청자 중 해당 매칭에 포함된 사용자만 가능)
+    if current_user.user_id not in [match.senior_id, job.requester_id]:
+        raise HTTPException(status_code=403, detail="매칭 취소 권한이 없습니다.")
+    
+    match.status = "CANCELED"
+    job.status = "OPEN" # 공고 상태 원복
+    
+    # 취소한 주체의 trust_score 감점 로직 (예시: -3점)
+    if current_user.role == "SENIOR":
+        senior = db.query(models.SeniorProfile).filter(models.SeniorProfile.user_id == match.senior_id).first()
+        if senior:
+            senior.trust_score -= 3
+    else:
+        requester = db.query(models.RequesterProfile).filter(models.RequesterProfile.user_id == job.requester_id).first()
+        if requester:
+            requester.trust_score -= 3
+
+    # 상대방에게 취소 알림 생성
+    target_user_id = job.requester_id if current_user.role == "SENIOR" else match.senior_id
+    db.add(models.Notification(
+        user_id=target_user_id,
+        related_id=match.match_id,
+        type="CANCELED",
+        content=f"'{job.title}' 제안이 취소되었습니다."
+    ))
+    
+    db.commit()
+    return {"message": "매칭이 성공적으로 취소되었습니다."}
+

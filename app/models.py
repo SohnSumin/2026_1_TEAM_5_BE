@@ -141,3 +141,15 @@ class OTPCode(Base):
     otp_code = Column(String(6), nullable=False)
     expires_at = Column(DateTime, nullable=False)
     created_at = Column(DateTime, server_default=func.now())
+
+
+# --- 4. User Report ---
+class UserReport(Base):
+    __tablename__ = "user_reports"
+    report_id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    reporter_user_id = Column(UUID(as_uuid=True), ForeignKey("users.user_id"))
+    reported_user_id = Column(UUID(as_uuid=True), ForeignKey("users.user_id"))
+    reason = Column(ARRAY(Text), nullable=False)
+    description = Column(Text)
+    status = Column(String(20), default="PENDING") # PENDING, RESOLVED
+    created_at = Column(DateTime, server_default=func.now())

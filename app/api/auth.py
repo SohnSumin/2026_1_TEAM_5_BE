@@ -9,6 +9,8 @@ from jose import jwt
 from datetime import datetime, timedelta
 from dotenv import load_dotenv
 import os
+import re
+
 
 load_dotenv()
 
@@ -79,6 +81,12 @@ def signup_senior(payload: schemas.SeniorCreate, db: Session = Depends(get_db)):
         raise HTTPException(status_code=400, detail="이미 가입된 전화번호입니다.")
 
     # 2) User 생성
+
+    # phone_number 정규식 검증 -> 010-2=1234=5678의 형태)
+    phone_pattern = re.compile(r"^010-\d{4}-\d{4}$")
+    if not phone_pattern.match(payload.phone_number):
+        raise HTTPException(status_code=400, detail="전화번호 형식이 올바르지 않습니다. 예시: 010-1234-5678")   
+
     new_user = models.User(phone_number=payload.phone_number, role="SENIOR")
     db.add(new_user)
     db.flush() 

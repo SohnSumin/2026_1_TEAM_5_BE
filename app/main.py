@@ -2,7 +2,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import text
 from app.core.database import engine, Base
-from app.api import auth, jobs, locations, matches
+from app.api import auth, jobs, locations, matches, report
 from app.db.seed import seed_categories
 from app.core.database import SessionLocal
 from app import models  # 반드시 임포트해야 metadata에 모델 정보가 등록됩니다.
@@ -42,6 +42,7 @@ app.include_router(auth.router)
 app.include_router(jobs.router)
 app.include_router(locations.router)
 app.include_router(matches.router)
+app.include_router(report.router)
 
 @app.get("/")
 def root():
