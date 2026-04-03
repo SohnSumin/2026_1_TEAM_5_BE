@@ -1,5 +1,6 @@
 import uuid
 from sqlalchemy import Column, String, Integer, Boolean, Text, ForeignKey, DateTime, Date, Time, func, Enum, Float
+from pgvector.sqlalchemy import Vector
 from sqlalchemy.dialects.postgresql import UUID, ARRAY
 from sqlalchemy.orm import relationship
 from geoalchemy2 import Geography, WKTElement
@@ -29,8 +30,11 @@ class SeniorProfile(Base):
     trust_score = Column(Integer, default=50)
     badges = Column(ARRAY(Text))
     bio_summary = Column(Text)
-    tags = Column(ARRAY(Text))
+    main_tags = Column(ARRAY(String)) # AI가 추출한 주요 대분류 태그 (예: [가사 및 환경 관리])
+    sub_tags = Column(ARRAY(String)) # 실제 선택된 태그들 (예: [#밑반찬, #요리])
     auth_code = Column(String(20))
+    gender_preference = Column(String(20)) # 남성, 여성, 무관
+    embedding = Column(Vector(768))
     updated_at = Column(DateTime, server_default=func.now(), onupdate=func.now())
 
     user = relationship("User", back_populates="senior_profile")
@@ -68,14 +72,6 @@ class SeniorLocation(Base):
         super().__init__(**kwargs)
 
 # --- 2. Jobs & Matchings ---
-
-class JobCategory(Base):
-    __tablename__ = "job_categories"
-    id = Column(Integer, primary_key=True)
-    main_category = Column(String(50), nullable=False) # 가사 및 환경 관리
-    sub_category = Column(String(50), nullable=False)  # 반찬/요리
-    tags = Column(ARRAY(String), nullable=False)       # [#집밥제조, #밑반찬...]
-
 class JobPost(Base):
     __tablename__ = "job_posts"
     post_id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
@@ -86,12 +82,14 @@ class JobPost(Base):
     longitude = Column(Float, nullable=False)
     location_coord = Column(Geography(geometry_type='POINT', srid=4326), nullable=False)
     location_name = Column(Text, nullable=False)
-    category_tag = Column(String(50)) # 실제 선택된 하나의 태그 (예: #밑반찬)
+    main_tags = Column(ARRAY(String)) # AI가 추출한 주요 대분류 태그 (예: [가사 및 환경 관리])
+    sub_tags = Column(ARRAY(String)) # 실제 선택된 태그들 (예: [#밑반찬, #요리])
     thumbnail_url = Column(Text)
     job_date = Column(Date, nullable=False)
     start_time = Column(Time)
     reward = Column(Integer, default=0)
     status = Column(String(20), default="OPEN") # OPEN, MATCHED, DONE, EXPIRED
+    embedding = Column(Vector(768))
     created_at = Column(DateTime, server_default=func.now())
 
     images = relationship("JobImage", back_populates="post", cascade="all, delete-orphan")

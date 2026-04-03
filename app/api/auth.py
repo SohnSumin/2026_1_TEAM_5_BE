@@ -9,6 +9,8 @@ from jose import jwt
 from datetime import datetime, timedelta
 from dotenv import load_dotenv
 from app.utils.ai_tags import extract_senior_tags
+from app.db.seed import TAGS_DATA
+from app.utils.vector_embedding import get_embedding
 import os
 import re
 
@@ -74,7 +76,6 @@ def login(payload: schemas.OTPVerify, db: Session = Depends(get_db)):
     }
 
 # [POST] 시니어 회원가입 (개인정보, 관심사, 활동 거점 등록)
-
 @router.post("/signup/senior", response_model=schemas.SeniorDetailResponse)
 def signup_senior(payload: schemas.SeniorCreate, db: Session = Depends(get_db)):
     # 복지관 인증번호 검증
@@ -100,12 +101,19 @@ def signup_senior(payload: schemas.SeniorCreate, db: Session = Depends(get_db)):
     db.add(new_user)
     db.flush() 
 
-    # 3) SeniorProfile 생성
+    # 3) SeniorProfile 생성 (AI 태그 추출 포함)
+    final_sub_tags = payload.sub_tags if payload.sub_tags else extract_senior_tags(payload.bio_summary)
 
-    final_tags = payload.tags if payload.tags else extract_senior_tags(payload.bio_summary)
+    # AI가 추출한 서브 태그들이 속한 메인 태그들을 추출하여 저장
+    final_main_tags = []
+    for sub in final_sub_tags:
+        for category in TAGS_DATA:
+            if sub in category["sub"]:
+                final_main_tags.append(category["main"])
+                break
 
     # 태그가 끝까지 추출되지 않았을 경우에 대한 예외 처리
-    if not final_tags:
+    if not final_sub_tags or not final_main_tags:
         raise HTTPException(
             status_code=400, 
             detail="자기소개를 더 자세히 적어주시거나 관심 태그를 선택해주세요."
@@ -116,9 +124,12 @@ def signup_senior(payload: schemas.SeniorCreate, db: Session = Depends(get_db)):
         name=payload.name,
         gender=payload.gender,
         birth_year=payload.birth_year,
-        tags=final_tags,
+        main_tags=final_main_tags,
+        sub_tags=final_sub_tags,
+        gender_preference=payload.gender_preference,
         bio_summary=payload.bio_summary,
         auth_code=payload.auth_code,
+        embedding=get_embedding(payload.bio_summary) if payload.bio_summary else None,
         profile_icon=payload.profile_icon,
     )
     db.add(new_profile)
@@ -214,6 +225,9 @@ def update_my_profile(
         for key, value in update_data.items():
             setattr(profile, key, value)
 
+        if "bio_summary" in update_data:
+            profile.embedding = get_embedding(profile.bio_summary)
+
         if hasattr(payload, 'locations') and payload.locations is not None:
             db.query(models.SeniorLocation).filter(models.SeniorLocation.user_id == current_user.user_id).delete()
             for loc in payload.locations:
@@ -245,7 +259,6 @@ def update_my_profile(
         return profile
 
     raise HTTPException(status_code=400, detail="업데이트할 수 없는 유저 유형입니다.")
-
 
 
 # [DELETE] 회원 탈퇴 처리 (OTP 인증 후 모든 데이터 삭제)

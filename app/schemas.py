@@ -1,4 +1,5 @@
 from pydantic import BaseModel, Field, EmailStr, HttpUrl
+from pgvector.sqlalchemy import Vector
 from typing import List, Optional
 from uuid import UUID
 from datetime import date, time, datetime
@@ -49,6 +50,12 @@ class ReportStatus(str, Enum):
     PENDING = "PENDING"
     RESOLVED = "RESOLVED"
     REJECTED = "REJECTED"
+
+class GenderPreference(str, Enum):
+    MALE = "MALE"
+    FEMALE = "FEMALE"
+    ANY = "ANY"
+
 
 # --- 1. Auth & Profiles ---
 
@@ -109,17 +116,23 @@ class SeniorCreate(BaseModel):
     auth_code: Optional[str] = None
     profile_icon: Optional[str] = "default_icon"
     bio_summary: Optional[str] = None
-    tags: List[str] = []
+    gender_preference: Optional[GenderPreference] = GenderPreference.ANY
+    main_tags: List[str] = []
+    sub_tags: List[str] = []
+    embedding: List[float] = []
     locations: List[LocationCreate] = Field(..., min_items=1, max_items=3)
 
 class SeniorUpdate(BaseModel):
     name: Optional[str] = None
     gender: Optional[str] = None
-    tags: Optional[List[str]] = None
+    main_tags: List[str] = None
+    sub_tags: List[str] = None
     profile_image_url: Optional[str] = None
     birth_year: Optional[int] = None
     bio_summary: Optional[str] = None
     profile_icon: Optional[str] = None
+    embedding: List[float] = []
+
     locations: Optional[List[LocationCreate]] = None
 
 # 시니어 상세 응답 (위치 정보 포함)
@@ -131,7 +144,10 @@ class SeniorDetailResponse(BaseModel):
     trust_score: int = 50
     profile_icon: Optional[str] = None 
     bio_summary: Optional[str] = None
-    tags: List[str] = []
+    main_tags: List[str]
+    sub_tags: List[str]
+    embedding: List[float] = []
+
     locations: List[LocationResponse] = []
 
     class Config:
@@ -164,29 +180,36 @@ class RequesterUpdate(BaseModel):
 class JobPostCreate(BaseModel):
     title: str
     content: str
-    category_tag: str
+    main_tags: List[str]
+    sub_tags: List[str]
+    thumbnail_url: Optional[str] = None
     job_date: date
     start_time: time
     latitude: float
     longitude: float
     location_name: str
     reward: int = 0
+    embedding: List[float] = []
     image_urls: List[str] = []
 
 class JobPostUpdate(BaseModel):
     title: Optional[str] = None
     content: Optional[str] = None
+    embedding: List[float] = []
+
     status: Optional[JobStatus] = None
 
 class JobPostResponse(BaseModel):
     post_id: UUID
     requester_id: UUID
     title: str
-    category_tag: str
+    main_tags: List[str]
+    sub_tags: List[str]
     job_date: date
     location_name: str
     thumbnail_url: Optional[str]
     status: JobStatus
+    embedding: List[float] = []
     created_at: datetime
 
     class Config:

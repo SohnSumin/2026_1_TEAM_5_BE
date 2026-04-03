@@ -31,7 +31,7 @@ class SeeNearAiTestClient {
   Future<void> runSeniorTest() async {
     print("\n--- [시니어 테스트] 시작 ---");
     final phone = generateRandomPhone;
-    const bio = "요리 잘하고 복지관에서 근무한 경험이 있어요. 산책도 좋아하거든유";
+    const bio = "요리 잘하고 복지관에서 근무한 경험이 있어요. 산책도 좋아하거든유~";
 
     // 1. AI 태그 추천
     final recRes = await http.post(

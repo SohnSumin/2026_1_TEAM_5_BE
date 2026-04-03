@@ -7,18 +7,21 @@ from app.core.database import get_db
 from app import models, schemas
 from uuid import UUID
 from app.api.deps import get_current_user
-from app.utils.ai_tags import extract_job_post_tag
-from app.db.seed import ALL_TAGS
+from app.utils.ai_tags import extract_job_post_tags
+from app.utils.vector_embedding import get_embedding
+
+from app.db.seed import TAGS_DATA
+
 
 router = APIRouter(prefix="/api/jobs", tags=["jobs"])
 
-@router.post("/recommend-tag")
-def recommend_job_tag(payload: schemas.JobTagRecommendRequest):
+router.post("/tags/recommend")
+def recommend_tags(payload: schemas.TagRecommendRequest):
     """
-    공고 본문을 분석하여 가장 적합한 카테고리 태그 1개를 추천합니다.
+    사용자의 자기소개를 바탕으로 AI가 적절한 태그 5개를 추천합니다.
     """
-    recommended = extract_job_post_tag(payload.content)
-    return {"recommended_tag": recommended}
+    recommended = extract_job_post_tags(payload.content)
+    return {"recommended_tags": recommended}
 
 # [POST] 새로운 소일거리 공고 등록 (이미지 포함)
 @router.post("", response_model=schemas.JobPostResponse)
@@ -31,34 +34,47 @@ def create_job(
         raise HTTPException(status_code=403, detail="요청자만 공고를 등록할 수 있습니다.")
 
 # 1. 변수 초기화 (중요: 에러 방지)
-    final_tag = payload.category_tag 
+    final_main_tags = payload.main_tags[0] if payload.main_tags else None
+    final_sub_tags = payload.sub_tags[0] if payload.sub_tags else None
 
-    # 2. 사용자가 선택한 태그가 없으면 AI 추출 시도
-    if not final_tag:
-        try:
-            from app.utils.ai_tags import extract_job_post_tag
-            final_tag = extract_job_post_tag(payload.content)
-        except Exception as e:
-            print(f"⚠️ AI 추출 중 시스템 에러 발생: {e}")
-            final_tag = None
+    # 3) SeniorProfile 생성 (AI 태그 추출 포함)
+    final_sub_tags = payload.sub_tags if payload.sub_tags else extract_job_post_tags(payload.content)
 
-    # 3. AI가 실패했거나 결과가 없는 경우 방어 로직
-    if not final_tag:
-        final_tag = ALL_TAGS[0]  # 기본값으로 첫 번째 태그 할당
-        print(f"ℹ️ 기본 태그({final_tag})로 대체되었습니다.")
+    # AI가 추출한 서브 태그들이 속한 메인 태그들을 추출하여 저장
+    final_main_tags = []
+    for sub in final_sub_tags:
+        for category in TAGS_DATA:
+            if sub in category["sub"]:
+                final_main_tags.append(category["main"])
+                break
 
+    # 태그가 끝까지 추출되지 않았을 경우에 대한 예외 처리
+    if not final_sub_tags or not final_main_tags:
+        raise HTTPException(
+            status_code=400, 
+            detail="자기소개를 더 자세히 적어주시거나 관심 태그를 선택해주세요."
+        )
+    
+    # 💡 제목 + 본문 결합하여 임베딩 생성
+    combined_text = f"{payload.title} {payload.content}"
+    job_embedding = get_embedding(combined_text)
+
+    # 4) JobPost 생성
     new_job = models.JobPost(
         requester_id=current_user.user_id,
         title=payload.title,
         content=payload.content,
-        category_tag=final_tag,
+        main_tags=final_main_tags,
+        sub_tags=final_sub_tags,
         job_date=payload.job_date,
         location_name=payload.location_name,
         latitude=payload.latitude,
         longitude=payload.longitude,
         start_time=payload.start_time,
+        embedding=job_embedding,
         reward=payload.reward,
         status="OPEN"
+        # thumbnail_url=payload.thumbnail_url
     )
     db.add(new_job)
     db.flush() # ID 확보
@@ -103,6 +119,10 @@ def update_job(
     for key, value in update_data.items():
         setattr(job, key, value)
     
+    if "title" in update_data or "content" in update_data:
+        combined_text = f"{job.title} {job.content}"
+        job.embedding = get_embedding(combined_text)
+
     db.commit()
     return {"message": "수정 완료"}
 
