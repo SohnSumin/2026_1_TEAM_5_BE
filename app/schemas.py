@@ -284,9 +284,10 @@ class UserReportResponse(BaseModel):
 # --- 5. AI Tag Extraction ---
 
 # 시니어 태그 추천 요청용
-class TagRecommendRequest(BaseModel):
-    bio_summary: str
 
+class SeniorTagRecommendRequest(BaseModel):
+    content: str
 # 공고 카테고리 추천 요청용
 class JobTagRecommendRequest(BaseModel):
+    title: str
     content: str

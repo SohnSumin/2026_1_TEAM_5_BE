@@ -19,13 +19,34 @@ load_dotenv()
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
 
+# app/api/jobs.py
+@router.post("/recommend-tags")
+def get_recommended_tags(payload: schemas.SeniorTagRecommendRequest):
+    # 제목과 본문을 합쳐서 분석
+    
+    # 1. AI로 서브 태그 추출
+    recommended_sub_tags = extract_senior_tags(payload.content)
+    
+    # 2. 서브 태그에 맞는 메인 태그 매칭
+    recommended_main_tags = set()
+    for sub in recommended_sub_tags:
+        for category in TAGS_DATA:
+            if sub in category["sub"]:
+                recommended_main_tags.add(category["main"])
+                break
+                
+    return {
+        "recommended_main_tags": list(recommended_main_tags),
+        "recommended_sub_tags": recommended_sub_tags
+    }
+
 # JWT 설정 (실제 운영 환경에서는 환경 변수 .env 사용 권장)
 SECRET_KEY = os.getenv('SECRET_KEY')
 ALGORITHM = os.getenv('ALGORITHM')
 ACCESS_TOKEN_EXPIRE_MINUTES = int(os.getenv('ACCESS_TOKEN_EXPIRE_MINUTES'))
 
 @router.post("/tags/recommend")
-def recommend_tags(payload: schemas.TagRecommendRequest):
+def recommend_tags(payload: schemas.SeniorTagRecommendRequest):
     """
     사용자의 자기소개를 바탕으로 AI가 적절한 태그 5개를 추천합니다.
     """
@@ -102,17 +123,31 @@ def signup_senior(payload: schemas.SeniorCreate, db: Session = Depends(get_db)):
     db.flush() 
 
     # 3) SeniorProfile 생성 (AI 태그 추출 포함)
-    final_sub_tags = payload.sub_tags if payload.sub_tags else extract_senior_tags(payload.bio_summary)
+    final_main_tags = payload.main_tags[0] if payload.main_tags else None
+    final_sub_tags = payload.sub_tags if payload.sub_tags else extract_senior_tags(payload.content)
 
-    # AI가 추출한 서브 태그들이 속한 메인 태그들을 추출하여 저장
-    final_main_tags = []
+    # 3) Job 생성 (AI 태그 추출 포함)
+
+    # 1. 서브 태그 리스트 준비 (사용자 입력 또는 AI 추출)
+    raw_sub_tags = payload.sub_tags if payload.sub_tags else extract_senior_tags(payload.bio_summary)
+
+    # 2. 서브 태그 자체에서도 중복 제거 및 공백 제거
+    final_sub_tags = list(set(tag.strip() for tag in raw_sub_tags))
+
+    # 3. 메인 태그 추출 (set을 사용하여 중복 자동 방지)
+    final_main_set = set()
+
     for sub in final_sub_tags:
         for category in TAGS_DATA:
+            # 서브 태그가 해당 카테고리에 포함되는지 확인
             if sub in category["sub"]:
-                final_main_tags.append(category["main"])
-                break
+                final_main_set.add(category["main"].strip())
+                break # 해당 서브 태그의 메인을 찾았으면 다음 서브 태그로 이동
 
-    # 태그가 끝까지 추출되지 않았을 경우에 대한 예외 처리
+    # 4. 최종 리스트 변환
+    final_main_tags = list(final_main_set)
+
+    # 3. 예외 처리 (비어있는지 확인)
     if not final_sub_tags or not final_main_tags:
         raise HTTPException(
             status_code=400, 
