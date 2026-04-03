@@ -45,13 +45,6 @@ SECRET_KEY = os.getenv('SECRET_KEY')
 ALGORITHM = os.getenv('ALGORITHM')
 ACCESS_TOKEN_EXPIRE_MINUTES = int(os.getenv('ACCESS_TOKEN_EXPIRE_MINUTES'))
 
-@router.post("/tags/recommend")
-def recommend_tags(payload: schemas.SeniorTagRecommendRequest):
-    """
-    사용자의 자기소개를 바탕으로 AI가 적절한 태그 5개를 추천합니다.
-    """
-    recommended = extract_senior_tags(payload.bio_summary)
-    return {"recommended_tags": recommended}
 
 def create_access_token(data: dict):
     to_encode = data.copy()
@@ -210,6 +203,7 @@ def signup_requester(payload: schemas.RequesterCreate, db: Session = Depends(get
         user_id=new_user.user_id,
         nickname=payload.nickname,
         gender=payload.gender,
+        gender_preference=payload.gender_preference,
         birth_year=payload.birth_year
     )
     db.add(new_profile)

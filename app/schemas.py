@@ -158,12 +158,15 @@ class RequesterCreate(BaseModel):
     phone_number: str
     nickname: str
     gender: str
+    gender_preference: Optional[GenderPreference] = GenderPreference.ANY
     birth_year: int
 
 class RequesterResponse(BaseModel):
     user_id: UUID
     nickname: str
     profile_image_url: Optional[str] = None
+    gender_preference: Optional[GenderPreference] = GenderPreference.ANY
+
     trust_score: int
 
     class Config:
@@ -173,6 +176,7 @@ class RequesterUpdate(BaseModel):
     nickname: Optional[str] = None
     gender: Optional[str] = None
     birth_year: Optional[int] = None
+    gender_preference: Optional[GenderPreference] = GenderPreference.ANY
     profile_image_url: Optional[str] = None
 
 # --- 2. Job Posts ---
@@ -284,9 +288,9 @@ class UserReportResponse(BaseModel):
 # --- 5. AI Tag Extraction ---
 
 # 시니어 태그 추천 요청용
-
 class SeniorTagRecommendRequest(BaseModel):
     content: str
+
 # 공고 카테고리 추천 요청용
 class JobTagRecommendRequest(BaseModel):
     title: str

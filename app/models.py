@@ -45,6 +45,7 @@ class RequesterProfile(Base):
     nickname = Column(String(50), nullable=False)
     gender = Column(String(10), nullable=False)
     birth_year = Column(Integer, nullable=False)
+    gender_preference = Column(String(20)) # 남성, 여성, 무관
     trust_score = Column(Integer, default=50)
     updated_at = Column(DateTime, onupdate=func.now())
 
