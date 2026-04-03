@@ -8,6 +8,7 @@ from app.api.deps import get_current_user
 from jose import jwt
 from datetime import datetime, timedelta
 from dotenv import load_dotenv
+from app.utils.ai_tags import extract_senior_tags
 import os
 import re
 
@@ -20,6 +21,14 @@ router = APIRouter(prefix="/api/auth", tags=["auth"])
 SECRET_KEY = os.getenv('SECRET_KEY')
 ALGORITHM = os.getenv('ALGORITHM')
 ACCESS_TOKEN_EXPIRE_MINUTES = int(os.getenv('ACCESS_TOKEN_EXPIRE_MINUTES'))
+
+@router.post("/tags/recommend")
+def recommend_tags(payload: schemas.TagRecommendRequest):
+    """
+    사용자의 자기소개를 바탕으로 AI가 적절한 태그 5개를 추천합니다.
+    """
+    recommended = extract_senior_tags(payload.bio_summary)
+    return {"recommended_tags": recommended}
 
 def create_access_token(data: dict):
     to_encode = data.copy()
@@ -92,12 +101,22 @@ def signup_senior(payload: schemas.SeniorCreate, db: Session = Depends(get_db)):
     db.flush() 
 
     # 3) SeniorProfile 생성
+
+    final_tags = payload.tags if payload.tags else extract_senior_tags(payload.bio_summary)
+
+    # 태그가 끝까지 추출되지 않았을 경우에 대한 예외 처리
+    if not final_tags:
+        raise HTTPException(
+            status_code=400, 
+            detail="자기소개를 더 자세히 적어주시거나 관심 태그를 선택해주세요."
+        )
+
     new_profile = models.SeniorProfile(
         user_id=new_user.user_id,
         name=payload.name,
         gender=payload.gender,
         birth_year=payload.birth_year,
-        tags=payload.tags,
+        tags=final_tags,
         bio_summary=payload.bio_summary,
         auth_code=payload.auth_code,
         profile_icon=payload.profile_icon,

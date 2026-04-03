@@ -7,8 +7,18 @@ from app.core.database import get_db
 from app import models, schemas
 from uuid import UUID
 from app.api.deps import get_current_user
+from app.utils.ai_tags import extract_job_post_tag
+from app.db.seed import ALL_TAGS
 
 router = APIRouter(prefix="/api/jobs", tags=["jobs"])
+
+@router.post("/recommend-tag")
+def recommend_job_tag(payload: schemas.JobTagRecommendRequest):
+    """
+    공고 본문을 분석하여 가장 적합한 카테고리 태그 1개를 추천합니다.
+    """
+    recommended = extract_job_post_tag(payload.content)
+    return {"recommended_tag": recommended}
 
 # [POST] 새로운 소일거리 공고 등록 (이미지 포함)
 @router.post("", response_model=schemas.JobPostResponse)
@@ -20,11 +30,28 @@ def create_job(
     if current_user.role != "REQUESTER":
         raise HTTPException(status_code=403, detail="요청자만 공고를 등록할 수 있습니다.")
 
+# 1. 변수 초기화 (중요: 에러 방지)
+    final_tag = payload.category_tag 
+
+    # 2. 사용자가 선택한 태그가 없으면 AI 추출 시도
+    if not final_tag:
+        try:
+            from app.utils.ai_tags import extract_job_post_tag
+            final_tag = extract_job_post_tag(payload.content)
+        except Exception as e:
+            print(f"⚠️ AI 추출 중 시스템 에러 발생: {e}")
+            final_tag = None
+
+    # 3. AI가 실패했거나 결과가 없는 경우 방어 로직
+    if not final_tag:
+        final_tag = ALL_TAGS[0]  # 기본값으로 첫 번째 태그 할당
+        print(f"ℹ️ 기본 태그({final_tag})로 대체되었습니다.")
+
     new_job = models.JobPost(
         requester_id=current_user.user_id,
         title=payload.title,
         content=payload.content,
-        category_tag=payload.category_tag,
+        category_tag=final_tag,
         job_date=payload.job_date,
         location_name=payload.location_name,
         latitude=payload.latitude,

@@ -257,3 +257,13 @@ class UserReportResponse(BaseModel):
 
     class Config:
         from_attributes = True
+
+# --- 5. AI Tag Extraction ---
+
+# 시니어 태그 추천 요청용
+class TagRecommendRequest(BaseModel):
+    bio_summary: str
+
+# 공고 카테고리 추천 요청용
+class JobTagRecommendRequest(BaseModel):
+    content: str
